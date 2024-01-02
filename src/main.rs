@@ -50,7 +50,7 @@ where
 
 const SIZE: usize = 600;
 const DDP_CHUNK_SIZE: usize = 480;
-const FPS: usize = 10;
+const FPS: usize = 24;
 type Canvas = [u8; SIZE * 3];
 
 async fn send_ddp(
@@ -184,13 +184,13 @@ async fn process(ddp: String, mut rx: tokio::sync::mpsc::Receiver<Vec<u8>>) -> a
         tokio::select! {
             _ = timeout => {
                 if last_kill_tx.is_some() {
-                    last_kill_tx.take().unwrap().send(()).await.unwrap();
+                    last_kill_tx.take().unwrap().send(()).await.ok();
                 }
             },
 
             Some(wasm) = rx.recv() => {
                 if last_kill_tx.is_some() {
-                    last_kill_tx.take().unwrap().send(()).await.unwrap();
+                    last_kill_tx.take().unwrap().send(()).await.ok();
                 }
 
                 let (kill_tx, kill_rx) = tokio::sync::mpsc::channel::<()>(1);

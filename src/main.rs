@@ -129,6 +129,9 @@ async fn run_program(
     );
 
     let size = Func::wrap(&mut store, |_: Caller<'_, Canvas>| -> u32 { SIZE as u32 });
+    let time = Func::wrap(&mut store, |_: Caller<'_, Canvas>| -> u64 {
+        std::time::Instant::now().elapsed().as_millis() as u64
+    });
 
     let imports = module.imports().collect::<Vec<_>>();
     let mut added_imports = vec![];
@@ -137,6 +140,7 @@ async fn run_program(
             "set_pixel" => added_imports.push(set_pixel.into()),
             "get_pixel" => added_imports.push(get_pixel.into()),
             "size" => added_imports.push(size.into()),
+            "time" => added_imports.push(time.into()),
             _ => {}
         }
     }

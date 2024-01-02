@@ -154,7 +154,7 @@ async fn run_program(
 
     let mut seq = 0;
     while kill.try_recv().is_err() {
-        store.set_fuel(500_000)?;
+        store.set_fuel(10_000_000)?;
 
         let now = std::time::Instant::now();
         let elapsed = (now - start_time).as_secs_f32();

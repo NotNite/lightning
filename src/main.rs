@@ -22,6 +22,7 @@ struct AppConfig {
     hass_entity_id: String,
     geoip_db: String,
     ddp_endpoint: String,
+    fps: usize,
 }
 
 #[derive(Clone)]
@@ -50,7 +51,6 @@ where
 
 const SIZE: usize = 600;
 const DDP_CHUNK_SIZE: usize = 480;
-const FPS: usize = 24;
 type Canvas = [u8; SIZE * 3];
 
 async fn send_ddp(
@@ -91,6 +91,7 @@ async fn run_program(
     mut kill: tokio::sync::mpsc::Receiver<()>,
     wasm: Vec<u8>,
     conn: Arc<tokio::net::UdpSocket>,
+    fps: usize,
 ) -> anyhow::Result<()> {
     let mut config = wasmtime::Config::new();
     config.consume_fuel(true);
@@ -150,7 +151,7 @@ async fn run_program(
     let tick = instance.get_typed_func::<f32, ()>(&mut store, "tick")?;
 
     let start_time = std::time::Instant::now();
-    let frame = std::time::Duration::from_millis(1000 / FPS as u64);
+    let frame = std::time::Duration::from_millis(1000 / fps as u64);
 
     let mut seq = 0;
     while kill.try_recv().is_err() {
@@ -177,7 +178,11 @@ async fn run_program(
     Ok(())
 }
 
-async fn process(ddp: String, mut rx: tokio::sync::mpsc::Receiver<Vec<u8>>) -> anyhow::Result<()> {
+async fn process(
+    ddp: String,
+    mut rx: tokio::sync::mpsc::Receiver<Vec<u8>>,
+    fps: usize,
+) -> anyhow::Result<()> {
     let mut last_kill_tx: Option<tokio::sync::mpsc::Sender<()>> = None;
     let conn = tokio::net::UdpSocket::bind("0.0.0.0:4049").await?;
     let conn = Arc::new(conn);
@@ -203,7 +208,7 @@ async fn process(ddp: String, mut rx: tokio::sync::mpsc::Receiver<Vec<u8>>) -> a
                 let conn = conn.clone();
                 tokio::spawn(async move {
                     println!("running new program");
-                    run_program(kill_rx, wasm, conn).await.unwrap();
+                    run_program(kill_rx, wasm, conn, fps).await.unwrap();
                 });
             }
         }
@@ -251,8 +256,9 @@ async fn main() -> anyhow::Result<()> {
 
     let (wasm_tx, wasm_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
     let ddp = config.ddp_endpoint.clone();
+    let fps = config.fps;
     tokio::spawn(async move {
-        process(ddp, wasm_rx).await.unwrap();
+        process(ddp, wasm_rx, fps).await.unwrap();
     });
 
     let db = std::fs::read(config.geoip_db.clone())?;

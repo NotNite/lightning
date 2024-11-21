@@ -28,7 +28,7 @@ struct AppConfig {
 #[derive(Clone)]
 struct AppState {
     geoip_db: Arc<maxminddb::Reader<Vec<u8>>>,
-    simple_tx: flume::Sender<LightParams>,
+    simple_tx: flume::Sender<SimpleLightParams>,
     wasm_tx: tokio::sync::mpsc::Sender<Vec<u8>>,
 }
 
@@ -208,7 +208,9 @@ async fn process(
                 let conn = conn.clone();
                 tokio::spawn(async move {
                     println!("running new program");
-                    run_program(kill_rx, wasm, conn, fps).await.unwrap();
+                    if let Err(e) = run_program(kill_rx, wasm, conn, fps).await {
+                        eprintln!("{:?}", e);
+                    }
                 });
             }
         }
@@ -221,7 +223,7 @@ async fn main() -> anyhow::Result<()> {
     let config = std::fs::read_to_string(config_path)?;
     let config: AppConfig = serde_json::from_str(&config)?;
 
-    let (simple_tx, simple_rx) = flume::unbounded::<LightParams>();
+    let (simple_tx, simple_rx) = flume::unbounded::<SimpleLightParams>();
     let config_recv = config.clone();
     let recv_task = tokio::task::spawn(async move {
         let client = reqwest::Client::new();
@@ -233,20 +235,40 @@ async fn main() -> anyhow::Result<()> {
                 msg = Some(new_msg);
             }
 
-            if let Some(msg) = msg {
-                let body = json!({
-                    "entity_id": config_recv.hass_entity_id,
-                    "rgb_color": [msg.r, msg.g, msg.b],
-                    "brightness": msg.bri
-                });
+            if let Some(SimpleLightParams(r, g, b, a)) = msg {
+                if a == 0 {
+                    let body = json!({
+                        "entity_id": config_recv.hass_entity_id,
+                    });
 
-                client
-                    .post(&config_recv.hass_endpoint)
-                    .bearer_auth(&config_recv.hass_access_token)
-                    .json(&body)
-                    .send()
-                    .await
-                    .ok();
+                    client
+                        .post(format!(
+                            "{}/services/light/turn_off",
+                            config_recv.hass_endpoint
+                        ))
+                        .bearer_auth(&config_recv.hass_access_token)
+                        .json(&body)
+                        .send()
+                        .await
+                        .ok();
+                } else {
+                    let body = json!({
+                        "entity_id": config_recv.hass_entity_id,
+                        "rgb_color": [r, g, b],
+                        "brightness": a
+                    });
+
+                    client
+                        .post(format!(
+                            "{}/services/light/turn_on",
+                            config_recv.hass_endpoint
+                        ))
+                        .bearer_auth(&config_recv.hass_access_token)
+                        .json(&body)
+                        .send()
+                        .await
+                        .ok();
+                }
             } else {
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 continue;
@@ -322,12 +344,13 @@ async fn simple(
     Query(query): Query<LightParams>,
     headers: HeaderMap,
 ) -> AppResponse {
+    let simple = SimpleLightParams(query.r, query.g, query.b, query.a.unwrap_or(query.bri));
     log_request(
         headers,
         State(state.clone()),
-        format!("{:?}", query).as_str(),
+        format!("{:?}", simple).as_str(),
     );
-    state.simple_tx.send(query)?;
+    state.simple_tx.send(simple)?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
@@ -342,9 +365,13 @@ struct LightParams {
     r: u8,
     g: u8,
     b: u8,
+    a: Option<u8>,
     #[serde(default = "default_brightness")]
     bri: u8,
 }
+
+#[derive(Debug)]
+struct SimpleLightParams(u8, u8, u8, u8);
 
 fn default_brightness() -> u8 {
     255

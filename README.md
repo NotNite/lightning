@@ -4,7 +4,7 @@ torturing myself with LED lights
 
 ## HTTP API
 
-GET `https://soulja-boy-told.me/light`, send query params `r` `g` `b` `bri`. all required between 0-255
+GET `https://soulja-boy-told.me/light`, send query params `r` `g` `b` `a`. all required between 0-255
 
 ## WebAssembly
 
@@ -16,4 +16,4 @@ POST `https://soulja-boy-told.me/light` send the WASM file as the body. API:
 - `time() -> u64`
   - returns unix time in ms
 
-you export a `tick(time: f32)`. program runs for 30 seconds. colors in format `0xRRGGBB`, idx from zero to the return value of `size()`. compile to wasm32
+you export a `tick(elapsed: f32)`, where elapsed is the seconds since program started (NOT delta time!). program runs for 30 seconds. colors in format `0xRRGGBB`, idx from zero to the return value of `size()`. compile to wasm32

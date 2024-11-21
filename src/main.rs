@@ -351,7 +351,10 @@ async fn simple(
         format!("{:?}", simple).as_str(),
     );
     state.simple_tx.send(simple)?;
-    Ok(StatusCode::NO_CONTENT.into_response())
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .body("Lights updated, thanks for torturing me".into())
+        .unwrap())
 }
 
 async fn wasm(State(state): State<AppState>, headers: HeaderMap, wasm: Bytes) -> AppResponse {

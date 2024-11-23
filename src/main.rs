@@ -236,7 +236,7 @@ async fn main() -> anyhow::Result<()> {
             }
 
             if let Some(SimpleLightParams(r, g, b, a)) = msg {
-                if a == 0 {
+                if a == 0 || (r == 0 && g == 0 && b == 0) {
                     let body = json!({
                         "entity_id": config_recv.hass_entity_id,
                     });
